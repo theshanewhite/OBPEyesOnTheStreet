@@ -146,7 +146,8 @@ void drawEyes(){
     point.y = (y + 240);
     //println("confining");
   }
-  noStroke();
+  
+  stroke(255,0,0);
   fill(0,0,255);
   ellipse(point.x,point.y,150,150);
   fill(0);
