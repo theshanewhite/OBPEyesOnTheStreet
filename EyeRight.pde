@@ -3,17 +3,20 @@ import processing.video.*;
 
 Capture video;
 OpenCV opencv;
-ArrayList<PVector> lag = new ArrayList<PVector>(10);
+ArrayList<PVector> lag = new ArrayList<PVector>(5);
 
 int camwidth = 1280;
 int camheight = 960;
-int xcutoff = 1000;
+int rightxcutoff = 1000;
+int leftxcutoff = 0;
 int ycutoff = 0;
+int eyeLidPushDown = 0;
+int yadjust = 120;
 
 void setup() {
   size(2500, 960);
   String[] cameras = Capture.list();
-  println(cameras);
+  //println(cameras);
   video = new Capture(this, camwidth, camheight, cameras[0]);
   opencv = new OpenCV(this, camwidth, camheight);
   
@@ -22,16 +25,13 @@ void setup() {
 }
 
 void draw() {
-  background(255);
+  background(0);
   video.read();
   opencv.loadImage(video);
   image(opencv.getOutput(), 480, 0);
-  line(xcutoff+480, 0, xcutoff+480, height);
-  line(480,ycutoff,width,ycutoff);
+  line(rightxcutoff+480, 0, rightxcutoff+480, height);
+  //line(480,ycutoff,width,ycutoff);
   opencv.updateBackground();
-  //opencv.setROI(0,0,960,950);
-  //opencv.dilate();
-  //opencv.erode();
   
   //Get all the contours, or all the points of motion by framedifferencing:
   ArrayList<Contour> conts = opencv.findContours();
@@ -55,16 +55,20 @@ void draw() {
   lag.add(center);
   ellipse(center.x+480, center.y, 100,100);
   
-  if(conts.size() <= 2 || (center.y < ycutoff) || (center.x > xcutoff)){
+  if(conts.size() <= 2 || (center.y < ycutoff) || (center.x > rightxcutoff)){
     fill(255);
-    ellipse(480/2,480/2,480,480);
-    line(0,240,480,240);
+    ellipse(480/2,480/2+eyeLidPushDown,480,480);
+    //fill(0);
+    ellipse(240,125,700,400);
+    //line(0,240,480,240);
   } else {
     drawEyes();
   }
   if(lag.size() > 10){
     lag.remove(0);
   }
+ // noFill();
+  
   
 }
 
@@ -79,7 +83,7 @@ PVector maxVector(ArrayList<Contour> contours){
   //Find the countour with most number of points
   for(Contour cont : contours){
     //println(cont.numPoints());
-    if(cont.getPoints().get(0).x < xcutoff && max < cont.numPoints()){
+    if(cont.getPoints().get(0).x < rightxcutoff && max < cont.numPoints()){
       max = cont.numPoints();
       index = contours.indexOf(cont);
     }
@@ -104,9 +108,10 @@ PVector maxVector(ArrayList<Contour> contours){
 
 void drawEyes(){
   
+  //The eye outline
   fill(255);
   stroke(0);
-  ellipse(480/2,480/2,480,480);
+  ellipse(480/2,480/2+eyeLidPushDown,480,480);
   
   float avX = 0;
   float avY = 0;
@@ -123,9 +128,9 @@ void drawEyes(){
   fill(150);
   ellipse(point.x+480, point.y, 100,100);
   
-  point.y = point.y+180;
+  point.y = (point.y*(480.0/camheight))+yadjust;
   //print(point.x+" ");
-  point.x = point.x*((float)480.0/(float)xcutoff);
+  point.x = point.x*((float)480.0/(float)rightxcutoff);
   //println(point.x);
   if(dist(point.x, point.y, 240, 240) > 145){
     float x = point.x-240;
@@ -148,8 +153,26 @@ void drawEyes(){
   }
   
   stroke(255,0,0);
-  fill(0,0,255);
+  //Iris color:
+  fill(150,150,255);
   ellipse(point.x,point.y,150,150);
+  //pupil color:
   fill(0);
   ellipse(point.x,point.y,75,75);
+  
+  //upper eyelid
+  fill(255);
+  beginShape();
+  vertex(0, 0);
+  vertex(480,0);
+  vertex(480,200);
+  curveVertex(480,200);
+  curveVertex(480, 200);
+  curveVertex(240,  150);
+  curveVertex(0,  200);
+  curveVertex(0,  200);
+  vertex(0,200);
+  endShape();
+  //fill(0);
+  //ellipse(240,50,700,400);
 }
