@@ -1,25 +1,55 @@
 import gab.opencv.*;
 import processing.video.*;
 
-Capture video;
-OpenCV opencv;
-ArrayList<PVector> lag = new ArrayList<PVector>(5);
+//-------Change the variables in this section to adjust parameters
 
+//Change this to LEFT for the left eye
+String eye = "RIGHT";
+
+//change this to increase / decrease smoothing
+int lagAmount = 10;
+
+//change these to change the amount of field in the left and right to cutoff
+int xcutoff = 1000;     //for the right eye
+int leftxcutoff = 300;  //for the left eye
+
+//set these to the resolution of your camera, check setup function to properly choose camera
 int camwidth = 1280;
 int camheight = 960;
-int rightxcutoff = 1000;
-int leftxcutoff = 0;
-int ycutoff = 0;
-int eyeLidPushDown = 0;
+
+//how far 'down' the eye looks
 int yadjust = 120;
 
+//if you don't want to look above a certain point, increase this number
+int ycutoff = 0;
+
+//--------end adjustable parameters
+
+Capture video;
+OpenCV opencv;
+ArrayList<PVector> lag = new ArrayList<PVector>();
+int eyeLidPushDown = 0;
+
+
 void setup() {
+  //set the size to the camwidth + 480
   size(2500, 960);
+  
+  if(eye.equals("LEFT")){
+    xcutoff = leftxcutoff;
+  }
+  
   String[] cameras = Capture.list();
-  //println(cameras);
+  
+  //Optionally, print the cameras attached to computer, and find the camera you want to use.
+  //To do so, uncomment the next 3 lines.
+  //for(int i = 0; i < cameras.length; i++){
+  //  println(i+": "+cameras[i]);
+  //}
+  
+  //Load the camera you want by putting the right number where it says cameras[0] below:
   video = new Capture(this, camwidth, camheight, cameras[0]);
   opencv = new OpenCV(this, camwidth, camheight);
-  
   opencv.startBackgroundSubtraction(5, 3, 0.5);  //need to play with
   video.start();
 }
@@ -29,48 +59,40 @@ void draw() {
   video.read();
   opencv.loadImage(video);
   image(opencv.getOutput(), 480, 0);
-  line(rightxcutoff+480, 0, rightxcutoff+480, height);
-  //line(480,ycutoff,width,ycutoff);
+  line(xcutoff+480, 0, xcutoff+480, height); //show where the processing stops, X
+  line(480,ycutoff,480+camwidth,ycutoff);    //where it stops, Y
   opencv.updateBackground();
   
   //Get all the contours, or all the points of motion by framedifferencing:
   ArrayList<Contour> conts = opencv.findContours();
   
   //Comment/Uncomment below to draw the contours
-  noFill();
-  stroke(255, 0, 0);
-  strokeWeight(3);
-  for (Contour contour : opencv.findContours()) {
-    if(contour.numPoints()> 100){
-      pushMatrix();
-      translate(480,0);
-      contour.draw();
-      popMatrix();
-    }
-  } //end contour draw
+  drawContours(conts);
   
   //find the center of the contour with the most points (highest motion)
   PVector center = maxVector(conts);
   
-  lag.add(center);
-  ellipse(center.x+480, center.y, 100,100);
+  //if it exists, add it to our lagged set of points, draw a red circle
+  if(center != null){
+    lag.add(center);
+    ellipse(center.x+480, center.y, 100,100);
+  }
   
-  if(conts.size() <= 2 || (center.y < ycutoff) || (center.x > rightxcutoff)){
+  if(conts.size() <= 2){ //not enough motion
     fill(255);
     ellipse(480/2,480/2+eyeLidPushDown,480,480);
-    //fill(0);
-    ellipse(240,125,700,400);
-    //line(0,240,480,240);
-  } else {
+    ellipse(240,125,700,400); //eyelid
+  } else { //enough motion!
     drawEyes();
   }
-  if(lag.size() > 10){
+  
+  //remove the front of the queue
+  if(lag.size() > legAmount){
     lag.remove(0);
   }
- // noFill();
-  
   
 }
+
 
 PVector maxVector(ArrayList<Contour> contours){
   float avX = 0;
@@ -82,10 +104,14 @@ PVector maxVector(ArrayList<Contour> contours){
   
   //Find the countour with most number of points
   for(Contour cont : contours){
-    //println(cont.numPoints());
-    if(cont.getPoints().get(0).x < rightxcutoff && max < cont.numPoints()){
-      max = cont.numPoints();
-      index = contours.indexOf(cont);
+    float x = cont.getPoints().get(0).x;
+    float y = cont.getPoints().get(0).y;
+    if((eye.equals("RIGHT") && x < xcutoff) 
+    || (eye.equals("LEFT")  && x > xcutoff)){
+      if(y > ycutoff && max < cont.numPoints()){
+        max = cont.numPoints();
+        index = contours.indexOf(cont);
+      }
     }
   }
   
@@ -98,13 +124,15 @@ PVector maxVector(ArrayList<Contour> contours){
       avY += vector.y;
       total++;
     }
+  } else {
+    return null;
   }
   avX = avX / total;
   avY = avY / total;
-  
   //return that point as a PVector
   return new PVector(avX, avY);
 }
+
 
 void drawEyes(){
   
@@ -113,6 +141,7 @@ void drawEyes(){
   stroke(0);
   ellipse(480/2,480/2+eyeLidPushDown,480,480);
   
+  //the average of the lag
   float avX = 0;
   float avY = 0;
   for(int i = 0; i < lag.size(); i++){
@@ -121,23 +150,21 @@ void drawEyes(){
   }
   avX = avX / lag.size();
   avY = avY / lag.size();
-  
   PVector point = new PVector(avX, avY);
   
-  //the unadjusted lagged point:
-  fill(150);
+  //Draw the unadjusted lagged point, i.e. where the eye is looking on the camera screen:
+  fill(150);  //a grey circle
   ellipse(point.x+480, point.y, 100,100);
   
   point.y = (point.y*(480.0/camheight))+yadjust;
-  //print(point.x+" ");
-  point.x = point.x*((float)480.0/(float)rightxcutoff);
-  //println(point.x);
-  if(dist(point.x, point.y, 240, 240) > 145){
+  point.x = point.x*((float)480.0/(float)camwidth);
+
+  //ye old stay in the circle trick, here be math:
+  if(dist(point.x, point.y, 240, 240) > 145){  
     float x = point.x-240;
     float y = ((point.y)-240);
     
     float t = atan(y/x);
-    //println(t);
 
     if(x < 0){
       y = -145*sin(t);
@@ -147,9 +174,8 @@ void drawEyes(){
       x = 145*cos(t);
     }
     
-    point.x = (x + 240);
-    point.y = (y + 240);
-    //println("confining");
+    point.x = abs(x + 240);
+    point.y = abs(y + 240);
   }
   
   stroke(255,0,0);
@@ -175,4 +201,19 @@ void drawEyes(){
   endShape();
   //fill(0);
   //ellipse(240,50,700,400);
+}
+
+
+void drawContours(ArrayList<Contour> contours){
+    noFill();
+  stroke(255, 0, 0);
+  strokeWeight(3);
+  pushMatrix();
+  translate(480,0);
+  for (Contour contour : contours) {
+    if(contour.numPoints()> 100){
+      contour.draw();
+    }
+  } 
+  popMatrix();
 }
